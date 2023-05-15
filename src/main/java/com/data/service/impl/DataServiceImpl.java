@@ -2,8 +2,10 @@ package com.data.service.impl;
 
 import cn.hutool.core.date.DateTime;
 import cn.hutool.core.date.DateUtil;
+import com.data.manager.impl.EspConnectionImpl;
 import com.data.service.DataServiceAbstract;
 import com.supconsoft.plantwrapex.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -14,34 +16,48 @@ import java.util.stream.Stream;
 @Service
 public class DataServiceImpl extends DataServiceAbstract {
 
-    private IConnection connection;
-
-
     @Override
     public void execute(String params) {
 
-    //伪造100条数据,调用CommonDao的insert方法，将数据插入到数据库中
-        List<Map<String, Object>> list = new ArrayList<>();
-        for (int i = 0; i < 10000000; i++) {
-            Map<String, Object> map = new HashMap<>();
-            map.put("tagname", "tagname" + i);
-            map.put("tagvalue",  i);
-            map.put("tagtime", new Date());
-            list.add(map);
-        }
-        //计算插入数据的时间
-        long start = System.currentTimeMillis();
-        int[] procrttables = commonDao.insertRecords("procrttable", list);
-        long end = System.currentTimeMillis();
-        System.out.println("插入数据的时间为:" + (end - start) + "ms");
-        System.out.println("插入数据的条数为:" + procrttables.length);
+        // 伪造100条数据,调用CommonDao的insert方法，将数据插入到数据库中
+//        List<Map<String, Object>> list = new ArrayList<>();
+//        for (int i = 0; i < 500000; i++) {
+//            Map<String, Object> map = new HashMap<>();
+//            map.put("tagname", "tagname" + i);
+//            map.put("tagvalue", i);
+//            map.put("tagtime", new Date());
+//            list.add(map);
+//        }
+//        //计算插入数据的时间
+//        long start = System.currentTimeMillis();
+//        commonDao.insertRecords("prochisttable_float", list);
+//        long end = System.currentTimeMillis();
+//        System.out.println("插入数据的时间为:" + (end - start) + "ms");
+
+
+//        System.out.println(stringTags.size());
+
+//        String[] array = floatTags.toArray(new String[0]);
+//        try {
+//            TagValueRow[] tagValueRows = espConnection.getTagFactory().getTagGroup(array).readHisValue(DateTime.of(Long.parseLong("2020-01-01 00:00:00")), DateTime.of(Long.parseLong("2021-01-01 00:00:10")), SampleOption.Sample_Before, offset, interval);
+//            //将tagValueRows转为list
+//            List<TagValueRow> tagValueRowList = Arrays.asList(tagValueRows);
+//            tagValueRowList.forEach(tagValueRow -> {
+//                TagValue[] values = tagValueRow.getValues();
+//                System.out.println(values.length);
+//            });
+//        } catch (PlantWrapException e) {
+//            e.printStackTrace();
+//        }
+//
+
 
 
 //        floatTags.forEach(floatTag -> {
-//            save(floatTag, startTime, endTime, interval, offset, "float");
+//            save(floatTag, startTime, endTime,offset,interval,"float");
 //        });
 //        stringTags.forEach(stringTag -> {
-//            save(stringTag, startTime, endTime, interval, offset, "string");
+//            save(stringTag, startTime, endTime,offset,interval,"string");
 //        });
     }
 
@@ -52,7 +68,6 @@ public class DataServiceImpl extends DataServiceAbstract {
             //如果有tagLastTime,则startTime为tagLastTime加上interval
             startTime.set(DateUtil.offsetSecond(DateTime.of(tagLastTime), interval));
         }
-
 
         DateTime currentStartTime = startTime.get();
         DateTime currentEndTime;
@@ -70,14 +85,14 @@ public class DataServiceImpl extends DataServiceAbstract {
 
             // 请求接口数据
             try {
-                TagValue[] tagValues = connection.getTagFactory().findTag(tagname).readHisValue(currentStartTime, currentEndTime, SampleOption.Sample_Before, offset, interval);
+                TagValue[] tagValues = espConnection.getTagFactory().findTag(tagname).readHisValue(currentStartTime, currentEndTime, SampleOption.Sample_Before, offset, interval);
                 // 将数据转换为List<Map<String, Object>>格式
                 List<Map<String, Object>> records = Stream.of(tagValues)
                         .map(tagValue -> {
                             Map<String, Object> record = new HashMap<>();
                             record.put("TAGNAME", tagname);
-                            record.put("TAGVALUE", tagValue.getValue().toString());
-                            record.put("TAGTIME", tagValue.getTimeStamp().toString());
+                            record.put("TAGVALUE", "string".equalsIgnoreCase(datatype) ? tagValue.getValue().toString() : Float.parseFloat(tagValue.getValue().toString()));
+                            record.put("TAGTIME", tagValue.getTimeStamp());
                             return record;
                         }).collect(Collectors.toList());
 
@@ -85,32 +100,19 @@ public class DataServiceImpl extends DataServiceAbstract {
 
                 if (records.size() > 0) {
                     // 插入数据
-                    int[] rows = commonDao.insertRecords(tableName, records);
+                    commonDao.insertRecords(tableName, records);
+                    // 更新最后一条数据的时间
+                    updateTagLastTime(tagname, currentEndTime);
+
                 }
 
             } catch (PlantWrapException e) {
                 e.printStackTrace();
             }
 
-            // 更新当前开始时间为当前结束时间，进入下一个时间段
-            currentStartTime = currentEndTime;
+            // 更新当前开始时间为当前结束时间+interval，进入下一个时间段
+            currentStartTime = DateUtil.offsetSecond( currentEndTime,interval);
 
         }
-    }
-
-    @Override
-    public void conn(String url) {
-        System.out.println("conn" + url);
-//        try {
-//            connection = ConnectionCreator.getConnection(url);
-//        } catch (PlantWrapException e) {
-//            e.printStackTrace();
-//        }
-    }
-
-    @Override
-    public void close() {
-        System.out.println("close connection");
-//        connection.close();
     }
 }
