@@ -14,6 +14,13 @@ public class CommonDao {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    /**
+     * 查询数据
+     *
+     * @param tableName  表名
+     * @param conditions 查询条件
+     * @return 查询结果
+     */
     public List<Map<String, Object>> selectRecordsWithConditions(String tableName, Map<String, Object> conditions) {
         StringBuilder sql = new StringBuilder("SELECT * FROM ").append(tableName).append(" WHERE 1 = 1 ");
         List<Object> args = new ArrayList<>();
@@ -24,11 +31,20 @@ public class CommonDao {
         return jdbcTemplate.queryForList(sql.toString(), args.toArray());
     }
 
+    /**
+     * 插入数据
+     *
+     * @param tableName 表名
+     * @param records   插入数据
+     */
     public void insertRecords(String tableName, List<Map<String, Object>> records) {
-        int numThreads = 4; //线程数
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads); // 创建线程池
-        int batchSize = 1000; // 每次提交的数据量
-
+        //线程数
+        int numThreads = 4;
+        // 创建线程池
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+        // 每次提交的数据量
+        int batchSize = 1000;
+        // 拼接 sql
         StringBuilder sql = new StringBuilder("INSERT INTO ").append(tableName);
         sql.append(" (");
         Set<String> columnNames = records.get(0).keySet();
@@ -54,7 +70,7 @@ public class CommonDao {
                 try {
                     jdbcTemplate.batchUpdate(sql.toString(), batchArgs);
                 } catch (Exception e) {
-                    e.printStackTrace();
+                   throw new RuntimeException(e);
                 }
             });
         }
@@ -63,15 +79,16 @@ public class CommonDao {
             // 等待所有任务都执行结束
             executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
     }
 
     /**
      * 更新数据
-     * @param tableName
-     * @param record
-     * @param conditions
+     *
+     * @param tableName  表名
+     * @param record     更新数据
+     * @param conditions 更新条件
      */
     public void updateRecords(String tableName, HashMap<String, Object> record, HashMap<String, Object> conditions) {
         StringBuilder sql = new StringBuilder("UPDATE ").append(tableName).append(" SET ");
@@ -87,5 +104,15 @@ public class CommonDao {
             args.add(value);
         });
         jdbcTemplate.update(sql.toString(), args.toArray());
+    }
+
+    /**
+     * 清空表数据
+     *
+     * @param tableName 表名
+     */
+    public void truncateTable(String tableName) {
+        String sql = "TRUNCATE TABLE " + tableName;
+        jdbcTemplate.execute(sql);
     }
 }
